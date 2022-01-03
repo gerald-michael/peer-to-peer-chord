@@ -2,9 +2,15 @@ package server;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class ServerThread extends Thread {
@@ -40,9 +46,10 @@ public class ServerThread extends Thread {
                         file = res.getString("message");
                         replicate = res.getInt("replicate");
                     }
+                    this.transferFile(choice, filename, replicate, file);
                     break;
                 case 2:
-                    // stabilize
+                    // stablize
                     break;
                 case 3:
                     // lookup request
@@ -112,6 +119,59 @@ public class ServerThread extends Thread {
         }
         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
         out.writeUTF(jsonObject.toString());
+    }
+
+    public void transferFile(int choice, String filename, int replicate, String file) throws Exception {
+        if (choice == 0) {
+            // download request
+            System.out.println("Download request for file: " + filename);
+            if (!server.checkFileExists(filename)) {
+                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("result", 0);
+                out.writeUTF(jsonObject.toString());
+                System.out.println("File Not Found");
+            } else {
+                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                JSONObject jsonObject = new JSONObject();
+                String message = "";
+                File myfile = new File(filename);
+                Scanner scanner = new Scanner(myfile);
+                while (scanner.hasNextLine()) {
+                    message += scanner.nextLine();
+                    message += "\n";
+                }
+                jsonObject.put("result", 1);
+                jsonObject.put("file", message);
+                scanner.close();
+                out.writeUTF(jsonObject.toString());
+            }
+
+        } else if (choice == 1) {
+            int fileId = Server.getHash(filename);
+            System.out.println("Uploading file: " + filename);
+            System.out.println("Uploading file ID: " + fileId);
+            server.addFile(filename);
+            this.recieveFile(filename, file);
+            System.out.println("Upload complete!!!");
+
+            // replicate file on successor
+            if (replicate == 1) {
+                if (server.getAddress() != server.getSucc()) {
+                    server.uploadFile(filename, server.getSucc(), false);
+                }
+            }
+        }
+    }
+
+    public void recieveFile(String filename, String file) {
+        try {
+            FileWriter fileWriter = new FileWriter(filename);
+            fileWriter.write(file);
+            fileWriter.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void joinNode(InetSocketAddress address) throws Exception {

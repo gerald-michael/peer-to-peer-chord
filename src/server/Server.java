@@ -1,8 +1,10 @@
 package server;
 
+import java.io.FileWriter;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
@@ -15,7 +17,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Server extends Thread {
@@ -136,7 +141,62 @@ public class Server extends Thread {
         }
     }
 
+    public void downloadFile(String filename) throws Exception {
 
+        System.out.println("Downloading file");
+        int fileId = Server.getHash(filename);
+
+        InetSocketAddress receiveAddress = this.getSuccessor(this.succ, fileId);
+        JSONObject obj = new JSONObject();
+        obj.put("key", 1);
+        obj.put("filename", filename);
+        obj.put("choice", 0);
+        Socket socket = new Socket(receiveAddress.getHostName(), receiveAddress.getPort());
+        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+        out.writeUTF(obj.toString());
+        DataInputStream in = new DataInputStream(socket.getInputStream());
+        JSONObject jsonObject = new JSONObject(in.readUTF());
+        int result = jsonObject.getInt("result");
+        if (result == 1) {
+            FileWriter fileWriter = new FileWriter(filename);
+            fileWriter.write(jsonObject.getString("file"));
+            fileWriter.close();
+            System.out.println("File downloaded successfully");
+
+        } else {
+            System.out.println("File not found");
+        }
+    }
+
+    public void uploadFile(String filename, InetSocketAddress recieveAddress, boolean replicate) {
+        System.out.println("Uploading file");
+        String message = new String();
+        JSONObject obj = new JSONObject();
+        if (replicate) {
+            obj.put("replicate", 1);
+        } else {
+            obj.put("replicate", -1);
+        }
+        obj.put("choice", 1);
+        try {
+            File file = new File(filename);
+            Scanner scanner = new Scanner(file);
+            while (scanner.hasNextLine()) {
+                message += scanner.nextLine();
+                message += "\n";
+            }
+            scanner.close();
+            obj.put("message", message);
+            obj.put("filename", filename);
+            Socket socket = new Socket(recieveAddress.getHostName(), recieveAddress.getPort());
+            obj.put("key", 1);
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            out.writeUTF(obj.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
 
     public InetSocketAddress getSuccessor(InetSocketAddress address, int keyId) {
         Socket socket = null;
@@ -200,12 +260,10 @@ public class Server extends Thread {
             socket.close();
             socket2.close();
 
-
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-
     public static void clear() {
         System.out.print("\033[H\033[2J");
         System.out.flush();
@@ -237,8 +295,16 @@ public class Server extends Thread {
                 case 2:
                     break;
                 case 3:
+                    System.out.println("File name: ");
+                    String filename = bufferedReader.readLine();
+                    int fileId = Server.getHash(filename);
+                    InetSocketAddress receiverAddress = this.getSuccessor(this.succ, fileId);
+                    this.uploadFile(filename, receiverAddress, true);
                     break;
                 case 4:
+                    System.out.println("File name: ");
+                    String downloadFilename = bufferedReader.readLine();
+                    this.downloadFile(downloadFilename);
                     break;
                 case 5:
                     this.printFingerTable();
@@ -289,7 +355,6 @@ public class Server extends Thread {
             }
         }
     }
-
 
     public void run() {
         // listen for connections
