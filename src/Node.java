@@ -8,6 +8,16 @@ public class Node {
         server.start();
         BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in));
         server.updateListenToPeers(bufferedReader, server);
+        new Thread() {
+            public void run() {
+                try {
+                    server.stabilize();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }.start();
     }
 
     public static void main(String[] args) {

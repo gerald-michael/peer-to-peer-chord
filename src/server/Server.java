@@ -168,6 +168,29 @@ public class Server extends Thread {
         }
     }
 
+    public void retrieveFiles() throws Exception {
+        JSONObject obj = new JSONObject();
+        Socket socket = new Socket(this.succ.getHostName(), this.succ.getPort());
+        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+        obj.put("key", 6);
+        out.writeUTF(obj.toString());
+        DataInputStream in = new DataInputStream(socket.getInputStream());
+        JSONArray response = new JSONArray(in.readUTF());
+        response.forEach((file)->{
+            JSONObject res = new JSONObject(file);
+            String filename = res.getString("filename");
+            String filecontents = res.getString("message");
+            this.addFile(filename);
+            try {
+                FileWriter fileWriter = new FileWriter(filename);
+                fileWriter.write(filecontents);
+                fileWriter.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
     public void uploadFile(String filename, InetSocketAddress recieveAddress, boolean replicate) {
         System.out.println("Uploading file");
         String message = new String();
@@ -260,9 +283,69 @@ public class Server extends Thread {
             socket.close();
             socket2.close();
 
+            // retrieve files
+            this.retrieveFiles();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public void stabilize() throws Exception {
+        while (true) {
+            Thread.sleep(5000);
+            if (this.address == this.succ) {
+                continue;
+            }
+            try {
+                Socket socket = new Socket(this.succ.getHostName(), this.succ.getPort());
+                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("key", 2);
+                out.writeUTF(jsonObject.toString());
+                DataInputStream in = new DataInputStream(socket.getInputStream());
+                JSONObject res = new JSONObject(in.readUTF());
+                String addr[] = res.getString("pred").split(":");
+                InetSocketAddress predecessor = new InetSocketAddress(addr[0], Integer.parseInt(addr[1]));
+                socket.close();
+                out.close();
+            } catch (Exception e) {
+                System.out.println("\nOffline node dedected!\nStabilizing...");
+                boolean newSuccessorFound = false;
+                InetSocketAddress newSucc = null;
+                for (Map.Entry<Integer, Peer> element : this.fingerTable.entrySet()) {
+                    if (element.getValue().getId() != this.succId) {
+                        newSuccessorFound = true;
+                        newSucc = element.getValue().getAddress();
+                        break;
+                    }
+                }
+                if (newSuccessorFound) {
+                    this.succ = newSucc;
+                    this.succId = Server.getHash(newSucc.toString().split("/")[1]);
+
+                    // inform new successor to update its predecessor
+                    Socket socket = new Socket(this.succ.getHostName(), this.succ.getPort());
+                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                    JSONObject jsonObject = new JSONObject();
+                    jsonObject.put("key", 4);
+                    jsonObject.put("op", 0);
+                    jsonObject.put("address", this.address);
+                    out.writeUTF(jsonObject.toString());
+                    out.close();
+                    socket.close();
+                } else {
+                    // Am the only node left
+                    this.pred = this.address;
+                    this.predId = this.id;
+                    this.succ = this.address;
+                    this.succId = this.id;
+                }
+                this.updateFingerTable();
+                this.updateOtherFingerTables();
+            }
+        }
+
     }
 
     public static void clear() {

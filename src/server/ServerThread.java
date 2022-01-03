@@ -49,7 +49,11 @@ public class ServerThread extends Thread {
                     this.transferFile(choice, filename, replicate, file);
                     break;
                 case 2:
-                    // stabilize
+                    // ping recieved
+                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                    JSONObject jsonObject = new JSONObject();
+                    jsonObject.put("pred", server.getPred().toString().split("/")[1]);
+                    out.writeUTF(jsonObject.toString());
                     break;
                 case 3:
                     // lookup request
@@ -75,6 +79,7 @@ public class ServerThread extends Thread {
                     break;
                 case 6:
                     // retrieve files
+                    this.sendFiles();
                     break;
                 case default:
                     System.out.println("Invalid connection request");
@@ -88,6 +93,51 @@ public class ServerThread extends Thread {
         }
     }
 
+    public void sendFiles() throws Exception {
+        JSONArray array = new JSONArray();
+        try {
+            ArrayList<String> files = server.getFiles();
+            files.forEach((filename) -> {
+                try {
+                    int fileId = Server.getHash(filename);
+                    if (fileId == server.getPredId()) {
+                        JSONObject object = new JSONObject();
+                        object.put("filename", filename);
+                        String message = "";
+                        File myfile = new File(filename);
+                        Scanner scanner = new Scanner(myfile);
+                        while (scanner.hasNextLine()) {
+                            message += scanner.nextLine();
+                            message += "\n";
+                        }
+                        object.put("message", message);
+                        scanner.close();
+                        array.put(object);
+                    } else if (fileId == Server
+                            .getHash(server.getSuccessor(server.getPred(), fileId).toString().split("/")[1])) {
+                        JSONObject object = new JSONObject();
+                        object.put("filename", filename);
+                        String message = "";
+                        File myfile = new File(filename);
+                        Scanner scanner = new Scanner(myfile);
+                        while (scanner.hasNextLine()) {
+                            message += scanner.nextLine();
+                            message += "\n";
+                        }
+                        object.put("message", message);
+                        scanner.close();
+                        array.put(object);
+                    }
+                } catch (Exception exception) {
+                    exception.printStackTrace();
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+        out.writeUTF(array.toString());
+    }
 
     public void lookupId(int keyId) throws Exception {
         JSONObject jsonObject = new JSONObject();
