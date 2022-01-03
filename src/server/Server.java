@@ -264,6 +264,7 @@ public class Server extends Thread {
             e.printStackTrace();
         }
     }
+
     public static void clear() {
         System.out.print("\033[H\033[2J");
         System.out.flush();
@@ -293,6 +294,7 @@ public class Server extends Thread {
                     this.sendJoinRequest(ip, port);
                     break;
                 case 2:
+                    this.leaveNetwork();
                     break;
                 case 3:
                     System.out.println("File name: ");
@@ -354,6 +356,64 @@ public class Server extends Thread {
                 e.printStackTrace();
             }
         }
+    }
+
+    public void leaveNetwork() throws Exception {
+        // inform successor to update its predeccessor
+        Socket socket = new Socket(this.succ.getHostName(), this.succ.getPort());
+        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("key", 4);
+        jsonObject.put("op", 0);
+        jsonObject.put("address", this.pred.toString().split("/")[1]);
+        out.writeUTF(jsonObject.toString());
+        out.close();
+        socket.close();
+        // inform predecessor to update its successor
+        Socket socket2 = new Socket(this.pred.getHostName(), this.pred.getPort());
+        DataOutputStream out2 = new DataOutputStream(socket2.getOutputStream());
+        JSONObject jsonObject2 = new JSONObject();
+        jsonObject2.put("key", 4);
+        jsonObject2.put("op", 1);
+        jsonObject2.put("address", this.succ.toString().split("/")[1]);
+        out2.writeUTF(jsonObject2.toString());
+        out2.close();
+        socket2.close();
+        // replicate files to successor
+        this.files.forEach((filename) -> {
+            try {
+                Socket socket3 = new Socket(this.succ.getHostName(), this.succ.getPort());
+                DataOutputStream out3 = new DataOutputStream(socket3.getOutputStream());
+                JSONObject jsonObject3 = new JSONObject();
+                jsonObject3.put("key", 1);
+                String message = "";
+                File file = new File(filename);
+                Scanner scanner = new Scanner(file);
+                while (scanner.hasNextLine()) {
+                    message += scanner.nextLine();
+                    message += "\n";
+                }
+                scanner.close();
+                jsonObject3.put("message", message);
+                jsonObject3.put("filename", filename);
+                jsonObject3.put("replicate", -1);
+                out3.writeUTF(jsonObject3.toString());
+                out3.close();
+                socket3.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        // tell others to update there finger tables
+        this.updateOtherFingerTables();
+        // changing predecessor and successor to myself
+        this.pred = this.address;
+        this.predId = this.id;
+        this.succ = this.address;
+        this.succId = this.id;
+        // clear finger table
+        this.fingerTable.clear();
+        System.out.println(this.address.toString().split("/")[1] + " has left the network");
     }
 
     public void run() {

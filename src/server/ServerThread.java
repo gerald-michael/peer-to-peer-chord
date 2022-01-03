@@ -49,7 +49,7 @@ public class ServerThread extends Thread {
                     this.transferFile(choice, filename, replicate, file);
                     break;
                 case 2:
-                    // stablize
+                    // stabilize
                     break;
                 case 3:
                     // lookup request
@@ -87,6 +87,7 @@ public class ServerThread extends Thread {
             server.getServerThreadThreads().remove(this);
         }
     }
+
 
     public void lookupId(int keyId) throws Exception {
         JSONObject jsonObject = new JSONObject();
